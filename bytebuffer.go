@@ -1,9 +1,5 @@
 package gonet
 
-import (
-	"encoding/binary"
-)
-
 const (
 	presize  = 0
 	initsize = 10
@@ -103,4 +99,3 @@ func (this *ByteBuffer) Prepend(buff []byte) bool {
 	copy(this._buffer[this._readerIndex:], buff)
 	return true
 }
-
