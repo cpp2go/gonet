@@ -136,7 +136,7 @@ func (this *TcpTask) recvloop() {
 	defer this.Close()
 
 	var (
-		writable  int
+		neednum   int
 		readnum   int
 		err       error
 		totalsize int
@@ -146,46 +146,58 @@ func (this *TcpTask) recvloop() {
 	)
 
 	for {
-		writable = this.recvBuff.WrSize()
-		if writable > 0 {
-			readnum, err = this.Conn.Read(this.recvBuff.WrBuf())
+		totalsize = this.recvBuff.RdSize()
+
+		if totalsize < cmd_header_size {
+
+			neednum = cmd_header_size - totalsize
+			if this.recvBuff.WrSize() < neednum {
+				this.recvBuff.WrGrow(neednum)
+			}
+
+			readnum, err = io.ReadAtLeast(this.Conn, this.recvBuff.WrBuf(), neednum)
 			if err != nil {
 				fmt.Println("[连接] 接收失败 ", this.Conn.RemoteAddr(), ",", err)
 				return
 			}
+
 			this.recvBuff.WrFlip(readnum)
-		} else {
-			tmpbuff := make([]byte, 64*1024)
-			readnum, err = this.Conn.Read(tmpbuff)
-			if err != nil {
-				fmt.Println("[连接] 接收失败 ", this.Conn.RemoteAddr(), ",", err)
-				return
-			}
-			this.recvBuff.Append(tmpbuff[:readnum]...)
+			totalsize = this.recvBuff.RdSize()
 		}
 
-		for {
-			totalsize = this.recvBuff.RdSize()
-			if totalsize < cmd_header_size {
-				break
+		msgbuff = this.recvBuff.RdBuf()
+
+		datasize = int(msgbuff[0]) | int(msgbuff[1]<<8) | int(msgbuff[2]<<16)
+		if datasize > cmd_max_size {
+			fmt.Println("[连接] 数据超过最大值 ", this.Conn.RemoteAddr(), ",", datasize)
+			return
+		}
+
+		if totalsize < cmd_header_size+datasize {
+
+			neednum = cmd_header_size + datasize - totalsize
+			if this.recvBuff.WrSize() < neednum {
+				this.recvBuff.WrGrow(neednum)
 			}
-			msgbuff = this.recvBuff.RdBuf()
-			datasize = int(msgbuff[0]) | int(msgbuff[1]<<8) | int(msgbuff[2]<<16)
-			if datasize > cmd_max_size {
-				fmt.Println("[连接] 数据超过最大值 ", this.Conn.RemoteAddr(), ",", datasize)
+
+			readnum, err = io.ReadAtLeast(this.Conn, this.recvBuff.WrBuf(), neednum)
+			if err != nil {
+				fmt.Println("[连接] 接收失败 ", this.Conn.RemoteAddr(), ",", err)
 				return
 			}
-			if totalsize < datasize+cmd_header_size {
-				break
-			}
-			if msgbuff[3] != 0 {
-				mbuffer = zlibUnCompress(msgbuff[cmd_header_size : datasize+cmd_header_size])
-			} else {
-				mbuffer = msgbuff[cmd_header_size : datasize+cmd_header_size]
-			}
-			this.Derived.ParseMsg(mbuffer)
-			this.recvBuff.RdFlip(datasize + cmd_header_size)
+
+			this.recvBuff.WrFlip(readnum)
+			msgbuff = this.recvBuff.RdBuf()
 		}
+
+		if msgbuff[3] != 0 {
+			mbuffer = zlibUnCompress(msgbuff[cmd_header_size : cmd_header_size+datasize])
+		} else {
+			mbuffer = msgbuff[cmd_header_size : cmd_header_size+datasize]
+		}
+
+		this.Derived.ParseMsg(mbuffer)
+		this.recvBuff.RdFlip(cmd_header_size + datasize)
 	}
 }
 
