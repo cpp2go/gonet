@@ -49,11 +49,11 @@ func NewTcpTask(conn net.Conn) *TcpTask {
 func zlibCompress(src []byte) []byte {
 	var in bytes.Buffer
 	w := zlib.NewWriter(&in)
-	defer w.Close()
 	_, err := w.Write(src)
 	if err != nil {
 		return nil
 	}
+	w.Close()
 	return in.Bytes()
 }
 
