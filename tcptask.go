@@ -139,7 +139,6 @@ func (this *TcpTask) recvloop() {
 		writable  int
 		readnum   int
 		err       error
-		tmpbuff   = make([]byte, 64*1024)
 		totalsize int
 		datasize  int
 		msgbuff   []byte
@@ -156,6 +155,7 @@ func (this *TcpTask) recvloop() {
 			}
 			this.recvBuff.WrFlip(readnum)
 		} else {
+			tmpbuff := make([]byte, 64*1024)
 			readnum, err = this.Conn.Read(tmpbuff)
 			if err != nil {
 				fmt.Println("[连接] 接收失败 ", this.Conn.RemoteAddr(), ",", err)
@@ -179,9 +179,9 @@ func (this *TcpTask) recvloop() {
 				break
 			}
 			if msgbuff[3] != 0 {
-				mbuffer = zlibUnCompress(msgbuff[4 : datasize+cmd_header_size])
+				mbuffer = zlibUnCompress(msgbuff[cmd_header_size : datasize+cmd_header_size])
 			} else {
-				mbuffer = msgbuff[4 : datasize+cmd_header_size]
+				mbuffer = msgbuff[cmd_header_size : datasize+cmd_header_size]
 			}
 			this.Derived.ParseMsg(mbuffer)
 			this.recvBuff.RdFlip(datasize + cmd_header_size)

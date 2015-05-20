@@ -23,9 +23,10 @@ func NewByteBuffer() *ByteBuffer {
 
 func (this *ByteBuffer) Append(buff ...byte) {
 	size := len(buff)
-	if size > this.WrSize() {
-		this.wrreserve(size)
+	if size == 0 {
+		return
 	}
+	this.WrGrow(size)
 	copy(this._buffer[this._writerIndex:], buff)
 	this.WrFlip(size)
 }
@@ -43,6 +44,12 @@ func (this *ByteBuffer) WrSize() int {
 
 func (this *ByteBuffer) WrFlip(size int) {
 	this._writerIndex += size
+}
+
+func (this *ByteBuffer) WrGrow(size int) {
+	if size > this.WrSize() {
+		this.wrreserve(size)
+	}
 }
 
 func (this *ByteBuffer) RdBuf() []byte {
