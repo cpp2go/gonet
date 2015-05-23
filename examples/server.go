@@ -22,9 +22,9 @@ func (this *EchoTask) ParseMsg(data []byte) bool {
 
 	this.Verify()
 
-	fmt.Println(string(data))
+	fmt.Println("> ", len(data), ",", string(data))
 
-	this.AsyncSend(data)
+	this.Send(data)
 
 	return true
 }

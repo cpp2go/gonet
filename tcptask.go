@@ -100,13 +100,12 @@ func (this *TcpTask) IsVerified() bool {
 	return this.verified
 }
 
-func (this *TcpTask) AsyncSend(msg []byte) bool {
+func (this *TcpTask) Send(msg []byte) bool {
 	if this.IsClosed() {
 		return false
 	}
 	var (
 		mbuffer    []byte
-		msize      int
 		iscompress byte
 	)
 	if len(msg) > cmd_zip_size {
@@ -119,12 +118,16 @@ func (this *TcpTask) AsyncSend(msg []byte) bool {
 		mbuffer = msg
 		iscompress = 0
 	}
-	msize = len(mbuffer)
-	this.sendMutex.Lock()
-	this.sendBuff.Append(byte(msize), byte(msize>>8), byte(msize>>16), iscompress)
-	this.sendBuff.Append(mbuffer...)
-	this.sendMutex.Unlock()
+	this.AsyncSend(mbuffer, iscompress)
 	return true
+}
+
+func (this *TcpTask) AsyncSend(buffer []byte, iscompress byte) {
+	bsize := len(buffer)
+	this.sendMutex.Lock()
+	this.sendBuff.Append(byte(bsize), byte(bsize>>8), byte(bsize>>16), iscompress)
+	this.sendBuff.Append(buffer...)
+	this.sendMutex.Unlock()
 }
 
 func (this *TcpTask) recvloop() {
