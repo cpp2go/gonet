@@ -173,7 +173,7 @@ func (this *TcpTask) recvloop() {
 
 		msgbuff = this.recvBuff.RdBuf()
 
-		datasize = int(msgbuff[0]) | int(msgbuff[1]<<8) | int(msgbuff[2]<<16)
+		datasize = int(msgbuff[0]) | int(msgbuff[1])<<8 | int(msgbuff[2])<<16
 		if datasize > cmd_max_size {
 			fmt.Println("[连接] 数据超过最大值 ", this.Conn.RemoteAddr(), ",", datasize)
 			return
