@@ -123,6 +123,9 @@ func (this *TcpTask) Send(msg []byte) bool {
 }
 
 func (this *TcpTask) AsyncSend(buffer []byte, iscompress byte) {
+	if this.IsClosed() {
+		return
+	}
 	bsize := len(buffer)
 	this.sendMutex.Lock()
 	this.sendBuff.Append(byte(bsize), byte(bsize>>8), byte(bsize>>16), iscompress)
