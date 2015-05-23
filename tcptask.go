@@ -217,15 +217,18 @@ func (this *TcpTask) sendloop() {
 
 	var (
 		tmpByte  = NewByteBuffer()
-		tick     = time.Tick(time.Millisecond * 10)
-		timeout  = time.After(time.Second * cmd_verify_time)
+		tick     = time.NewTicker(time.Millisecond * 10)
+		timeout  = time.NewTimer(time.Second * cmd_verify_time)
 		writenum int
 		err      error
 	)
 
+	defer tick.Stop()
+	defer timeout.Stop()
+
 	for {
 		select {
-		case <-tick:
+		case <-tick.C:
 			{
 				this.sendMutex.Lock()
 				if this.sendBuff.RdReady() {
@@ -245,7 +248,7 @@ func (this *TcpTask) sendloop() {
 			}
 		case <-this.stopedChan:
 			return
-		case <-timeout:
+		case <-timeout.C:
 			if !this.IsVerified() {
 				fmt.Println("[连接] 验证超时 ", this.Conn.RemoteAddr())
 				return
