@@ -18,13 +18,13 @@ func NewEchoTask(conn net.Conn) *EchoTask {
 	return s
 }
 
-func (this *EchoTask) ParseMsg(data []byte) bool {
+func (this *EchoTask) ParseMsg(data []byte, flag byte) bool {
 
 	this.Verify()
 
 	fmt.Println("> ", len(data), ",", string(data))
 
-	this.Send(data)
+	this.AsyncSend(data, flag)
 
 	return true
 }

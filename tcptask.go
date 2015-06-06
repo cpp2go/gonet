@@ -1,8 +1,6 @@
 package gonet
 
 import (
-	"bytes"
-	"compress/zlib"
 	"fmt"
 	"io"
 	"net"
@@ -13,7 +11,7 @@ import (
 )
 
 type ITcpTask interface {
-	ParseMsg(data []byte) bool
+	ParseMsg(data []byte, flag byte) bool
 	OnClose()
 }
 
@@ -21,7 +19,6 @@ const (
 	cmd_max_size    = 128 * 1024
 	cmd_header_size = 4 // 3字节指令长度 1字节是否压缩
 	cmd_verify_time = 10
-	cmd_zip_size    = 1024
 )
 
 type TcpTask struct {
@@ -44,31 +41,6 @@ func NewTcpTask(conn net.Conn) *TcpTask {
 		recvBuff:   NewByteBuffer(),
 		sendBuff:   NewByteBuffer(),
 	}
-}
-
-func zlibCompress(src []byte) []byte {
-	var in bytes.Buffer
-	w := zlib.NewWriter(&in)
-	_, err := w.Write(src)
-	if err != nil {
-		return nil
-	}
-	w.Close()
-	return in.Bytes()
-}
-
-func zlibUnCompress(src []byte) []byte {
-	b := bytes.NewReader(src)
-	var out bytes.Buffer
-	r, err := zlib.NewReader(b)
-	if err != nil {
-		return nil
-	}
-	_, err = io.Copy(&out, r)
-	if err != nil {
-		return nil
-	}
-	return out.Bytes()
 }
 
 func (this *TcpTask) Start() {
@@ -100,37 +72,16 @@ func (this *TcpTask) IsVerified() bool {
 	return this.verified
 }
 
-func (this *TcpTask) Send(msg []byte) bool {
+func (this *TcpTask) AsyncSend(buffer []byte, flag byte) bool {
 	if this.IsClosed() {
 		return false
 	}
-	var (
-		mbuffer    []byte
-		iscompress byte
-	)
-	if len(msg) > cmd_zip_size {
-		mbuffer = zlibCompress(msg)
-		if mbuffer == nil {
-			return false
-		}
-		iscompress = 1
-	} else {
-		mbuffer = msg
-		iscompress = 0
-	}
-	this.AsyncSend(mbuffer, iscompress)
-	return true
-}
-
-func (this *TcpTask) AsyncSend(buffer []byte, iscompress byte) {
-	if this.IsClosed() {
-		return
-	}
 	bsize := len(buffer)
 	this.sendMutex.Lock()
-	this.sendBuff.Append(byte(bsize), byte(bsize>>8), byte(bsize>>16), iscompress)
+	this.sendBuff.Append(byte(bsize), byte(bsize>>8), byte(bsize>>16), flag)
 	this.sendBuff.Append(buffer...)
 	this.sendMutex.Unlock()
+	return true
 }
 
 func (this *TcpTask) recvloop() {
@@ -148,7 +99,6 @@ func (this *TcpTask) recvloop() {
 		totalsize int
 		datasize  int
 		msgbuff   []byte
-		mbuffer   []byte
 	)
 
 	for {
@@ -196,13 +146,7 @@ func (this *TcpTask) recvloop() {
 			msgbuff = this.recvBuff.RdBuf()
 		}
 
-		if msgbuff[3] != 0 {
-			mbuffer = zlibUnCompress(msgbuff[cmd_header_size : cmd_header_size+datasize])
-		} else {
-			mbuffer = msgbuff[cmd_header_size : cmd_header_size+datasize]
-		}
-
-		this.Derived.ParseMsg(mbuffer)
+		this.Derived.ParseMsg(msgbuff[cmd_header_size:cmd_header_size+datasize], msgbuff[3])
 		this.recvBuff.RdFlip(cmd_header_size + datasize)
 	}
 }
