@@ -11,6 +11,7 @@ import (
 
 type IService interface {
 	Init() bool
+	Reload()
 	MainLoop()
 	Final() bool
 }
@@ -37,10 +38,12 @@ func (this *Service) Main() bool {
 	}()
 
 	ch := make(chan os.Signal, 1)
-	signal.Notify(ch, syscall.SIGINT, syscall.SIGQUIT, syscall.SIGABRT, syscall.SIGTERM, syscall.SIGPIPE)
+	signal.Notify(ch, syscall.SIGINT, syscall.SIGQUIT, syscall.SIGABRT, syscall.SIGTERM, syscall.SIGPIPE, syscall.SIGHUP)
 	go func() {
 		for sig := range ch {
 			switch sig {
+			case syscall.SIGHUP:
+				this.Derived.Reload()
 			case syscall.SIGPIPE:
 			default:
 				this.Terminate()

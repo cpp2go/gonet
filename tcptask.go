@@ -28,6 +28,7 @@ type TcpTask struct {
 	recvBuff   *ByteBuffer
 	sendBuff   *ByteBuffer
 	sendMutex  sync.Mutex
+	sendChan   chan bool
 	Conn       net.Conn
 	Derived    ITcpTask
 }
@@ -40,6 +41,7 @@ func NewTcpTask(conn net.Conn) *TcpTask {
 		stopedChan: make(chan struct{}),
 		recvBuff:   NewByteBuffer(),
 		sendBuff:   NewByteBuffer(),
+		sendChan:   make(chan bool),
 	}
 }
 
@@ -56,6 +58,7 @@ func (this *TcpTask) Close() {
 		fmt.Println("[连接] 断开连接 ", this.Conn.RemoteAddr())
 		this.Conn.Close()
 		close(this.stopedChan)
+		close(this.sendChan)
 		this.Derived.OnClose()
 	}
 }
@@ -81,6 +84,10 @@ func (this *TcpTask) AsyncSend(buffer []byte, flag byte) bool {
 	this.sendBuff.Append(byte(bsize), byte(bsize>>8), byte(bsize>>16), flag)
 	this.sendBuff.Append(buffer...)
 	this.sendMutex.Unlock()
+	select {
+	case this.sendChan <- true:
+	default:
+	}
 	return true
 }
 
@@ -170,25 +177,23 @@ func (this *TcpTask) sendloop() {
 
 	for {
 		select {
-		default:
-			{
+		case <-this.sendChan:
+			for {
 				this.sendMutex.Lock()
 				if this.sendBuff.RdReady() {
 					tmpByte.Append(this.sendBuff.RdBuf()[:this.sendBuff.RdSize()]...)
 					this.sendBuff.Reset()
 				}
 				this.sendMutex.Unlock()
-
-				if tmpByte.RdReady() {
-					writenum, err = this.Conn.Write(tmpByte.RdBuf()[:tmpByte.RdSize()])
-					if err != nil {
-						fmt.Println("[连接] 发送失败 ", this.Conn.RemoteAddr(), ",", err)
-						return
-					}
-					tmpByte.RdFlip(writenum)
-				} else {
-					time.Sleep(time.Millisecond * 100)
+				if !tmpByte.RdReady() {
+					break
 				}
+				writenum, err = this.Conn.Write(tmpByte.RdBuf()[:tmpByte.RdSize()])
+				if err != nil {
+					fmt.Println("[连接] 发送失败 ", this.Conn.RemoteAddr(), ",", err)
+					return
+				}
+				tmpByte.RdFlip(writenum)
 			}
 		case <-this.stopedChan:
 			return
