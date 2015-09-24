@@ -26,7 +26,7 @@ type TcpTask struct {
 	verified   bool
 	stopedChan chan struct{}
 	recvBuff   *ByteBuffer
-	sendBuff   *ByteBuffer
+	sendBuff   [][]byte
 	sendMutex  sync.Mutex
 	sendChan   chan bool
 	Conn       net.Conn
@@ -40,7 +40,6 @@ func NewTcpTask(conn net.Conn) *TcpTask {
 		Conn:       conn,
 		stopedChan: make(chan struct{}),
 		recvBuff:   NewByteBuffer(),
-		sendBuff:   NewByteBuffer(),
 		sendChan:   make(chan bool),
 	}
 }
@@ -80,9 +79,10 @@ func (this *TcpTask) AsyncSend(buffer []byte, flag byte) bool {
 		return false
 	}
 	bsize := len(buffer)
+	header := []byte{byte(bsize), byte(bsize >> 8), byte(bsize >> 16), flag}
 	this.sendMutex.Lock()
-	this.sendBuff.Append(byte(bsize), byte(bsize>>8), byte(bsize>>16), flag)
-	this.sendBuff.Append(buffer...)
+	this.sendBuff = append(this.sendBuff, header)
+	this.sendBuff = append(this.sendBuff, buffer)
 	this.sendMutex.Unlock()
 	select {
 	case this.sendChan <- true:
@@ -159,13 +159,6 @@ func (this *TcpTask) recvloop() {
 }
 
 func (this *TcpTask) sendloop() {
-	defer func() {
-		if err := recover(); err != nil {
-			fmt.Println("[异常] ", err, "\n", string(debug.Stack()))
-		}
-	}()
-	defer this.Close()
-
 	var (
 		tmpByte  = NewByteBuffer()
 		timeout  = time.NewTimer(time.Second * cmd_verify_time)
@@ -173,17 +166,23 @@ func (this *TcpTask) sendloop() {
 		err      error
 	)
 
-	defer timeout.Stop()
+	defer func() {
+		if err := recover(); err != nil {
+			fmt.Println("[异常] ", err, "\n", string(debug.Stack()))
+		}
+		this.Close()
+		timeout.Stop()
+	}()
 
 	for {
 		select {
 		case <-this.sendChan:
 			for {
 				this.sendMutex.Lock()
-				if this.sendBuff.RdReady() {
-					tmpByte.Append(this.sendBuff.RdBuf()[:this.sendBuff.RdSize()]...)
-					this.sendBuff.Reset()
+				for _, buffer := range this.sendBuff {
+					tmpByte.Append(buffer...)
 				}
+				this.sendBuff = this.sendBuff[:0]
 				this.sendMutex.Unlock()
 				if !tmpByte.RdReady() {
 					break
