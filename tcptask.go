@@ -44,9 +44,16 @@ func NewTcpTask(conn net.Conn) *TcpTask {
 	}
 }
 
+func (this *TcpTask) RemoteAddr() string {
+	if this.Conn == nil {
+		return ""
+	}
+	return this.Conn.RemoteAddr().String()
+}
+
 func (this *TcpTask) Start() {
 	if atomic.CompareAndSwapInt32(&this.closed, -1, 0) {
-		fmt.Println("[连接] 收到连接 ", this.Conn.RemoteAddr())
+		fmt.Println("[连接] 收到连接 ", this.RemoteAddr())
 		go this.sendloop()
 		go this.recvloop()
 	}
@@ -54,7 +61,7 @@ func (this *TcpTask) Start() {
 
 func (this *TcpTask) Close() {
 	if atomic.CompareAndSwapInt32(&this.closed, 0, 1) {
-		fmt.Println("[连接] 断开连接 ", this.Conn.RemoteAddr())
+		fmt.Println("[连接] 断开连接 ", this.RemoteAddr())
 		this.Conn.Close()
 		close(this.stopedChan)
 		close(this.sendChan)
@@ -122,7 +129,7 @@ func (this *TcpTask) recvloop() {
 
 			readnum, err = io.ReadAtLeast(this.Conn, this.recvBuff.WrBuf(), neednum)
 			if err != nil {
-				fmt.Println("[连接] 接收失败 ", this.Conn.RemoteAddr(), ",", err)
+				fmt.Println("[连接] 接收失败 ", this.RemoteAddr(), ",", err)
 				return
 			}
 
@@ -134,7 +141,7 @@ func (this *TcpTask) recvloop() {
 
 		datasize = int(msgbuff[0]) | int(msgbuff[1])<<8 | int(msgbuff[2])<<16
 		if datasize > cmd_max_size {
-			fmt.Println("[连接] 数据超过最大值 ", this.Conn.RemoteAddr(), ",", datasize)
+			fmt.Println("[连接] 数据超过最大值 ", this.RemoteAddr(), ",", datasize)
 			return
 		}
 
@@ -147,7 +154,7 @@ func (this *TcpTask) recvloop() {
 
 			readnum, err = io.ReadAtLeast(this.Conn, this.recvBuff.WrBuf(), neednum)
 			if err != nil {
-				fmt.Println("[连接] 接收失败 ", this.Conn.RemoteAddr(), ",", err)
+				fmt.Println("[连接] 接收失败 ", this.RemoteAddr(), ",", err)
 				return
 			}
 
@@ -191,7 +198,7 @@ func (this *TcpTask) sendloop() {
 				}
 				writenum, err = this.Conn.Write(tmpByte.RdBuf()[:tmpByte.RdSize()])
 				if err != nil {
-					fmt.Println("[连接] 发送失败 ", this.Conn.RemoteAddr(), ",", err)
+					fmt.Println("[连接] 发送失败 ", this.RemoteAddr(), ",", err)
 					return
 				}
 				tmpByte.RdFlip(writenum)
@@ -200,7 +207,7 @@ func (this *TcpTask) sendloop() {
 			return
 		case <-timeout.C:
 			if !this.IsVerified() {
-				fmt.Println("[连接] 验证超时 ", this.Conn.RemoteAddr())
+				fmt.Println("[连接] 验证超时 ", this.RemoteAddr())
 				return
 			}
 		}
