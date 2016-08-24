@@ -58,6 +58,8 @@ func (this *TcpTask) Close() {
 		this.Conn.Close()
 		close(this.stopedChan)
 		close(this.sendChan)
+		this.recvBuff.Reset()
+		this.sendBuff = this.sendBuff[:0]
 		this.Derived.OnClose()
 	}
 }

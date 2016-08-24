@@ -25,6 +25,23 @@ func (this *TcpServer) Bind(address string) error {
 	return nil
 }
 
+func (this *TcpServer) BindAccept(address string, handler func(*net.TCPConn)) error {
+	err := this.Bind(address)
+	if err != nil {
+		return err
+	}
+	go func() {
+		for {
+			conn, err := this.Accept()
+			if err != nil {
+				continue
+			}
+			handler(conn)
+		}
+	}()
+	return nil
+}
+
 func (this *TcpServer) Accept() (*net.TCPConn, error) {
 
 	this.listener.SetDeadline(time.Now().Add(time.Second * 1))
