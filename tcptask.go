@@ -53,9 +53,12 @@ func (this *TcpTask) RemoteAddr() string {
 
 func (this *TcpTask) Start() {
 	if atomic.CompareAndSwapInt32(&this.closed, -1, 0) {
+		job := &sync.WaitGroup{}
+		job.Add(2)
+		go this.sendloop(job)
+		go this.recvloop(job)
+		job.Wait()
 		fmt.Println("[连接] 收到连接 ", this.RemoteAddr())
-		go this.sendloop()
-		go this.recvloop()
 	}
 }
 
@@ -100,7 +103,7 @@ func (this *TcpTask) AsyncSend(buffer []byte, flag byte) bool {
 	return true
 }
 
-func (this *TcpTask) recvloop() {
+func (this *TcpTask) recvloop(job *sync.WaitGroup) {
 	defer func() {
 		if err := recover(); err != nil {
 			fmt.Println("[异常] ", err, "\n", string(debug.Stack()))
@@ -116,6 +119,8 @@ func (this *TcpTask) recvloop() {
 		datasize  int
 		msgbuff   []byte
 	)
+
+	job.Done()
 
 	for {
 		totalsize = this.recvBuff.RdSize()
@@ -167,7 +172,7 @@ func (this *TcpTask) recvloop() {
 	}
 }
 
-func (this *TcpTask) sendloop() {
+func (this *TcpTask) sendloop(job *sync.WaitGroup) {
 	var (
 		tmpByte  = NewByteBuffer()
 		timeout  = time.NewTimer(time.Second * cmd_verify_time)
@@ -182,6 +187,8 @@ func (this *TcpTask) sendloop() {
 		this.Close()
 		timeout.Stop()
 	}()
+
+	job.Done()
 
 	for {
 		select {
